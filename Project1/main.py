@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 def read_files(directory):
     texts = []
@@ -27,8 +28,61 @@ def save_to_csv(X, y, filename):
     df['label'] = y
     df.to_csv(filename, index=False)
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
+class MultinomialNaiveBayes:
+    def __init__(self):
+        self.class_log_prior_ = None
+        self.feature_log_prob_ = None
+        self.classes_ = None
 
+    def fit(self, X, y):
+        self.classes_, class_counts = np.unique(y, return_counts=True)
+        self.class_log_prior_ = np.log(class_counts) - np.log(len(y))
+
+        feature_counts = np.zeros((len(self.classes_), X.shape[1]))
+        for idx, c in enumerate(self.classes_):
+            feature_counts[idx, :] = X[y == c].sum(axis=0)
+        
+        smoothed_fc = feature_counts + 1  # Add-one Laplace smoothing
+        smoothed_totals = smoothed_fc.sum(axis=1).reshape(-1, 1)
+        self.feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_totals)
+
+    def predict(self, X):
+        log_probs = X @ self.feature_log_prob_.T + self.class_log_prior_
+        return self.classes_[np.argmax(log_probs, axis=1)]
+
+class BernoulliNaiveBayes:
+    def __init__(self):
+        self.class_log_prior_ = None
+        self.feature_log_prob_ = None
+        self.classes_ = None
+
+    def fit(self, X, y):
+        self.classes_, class_counts = np.unique(y, return_counts=True)
+        self.class_log_prior_ = np.log(class_counts) - np.log(len(y))
+
+        feature_counts = np.zeros((len(self.classes_), X.shape[1]))
+        for idx, c in enumerate(self.classes_):
+            feature_counts[idx, :] = X[y == c].sum(axis=0)
+        
+        smoothed_fc = feature_counts + 1  # Add-one Laplace smoothing
+        smoothed_totals = class_counts.reshape(-1, 1) + 2  # Total count for each class + 2
+        self.feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_totals)
+        self.feature_log_neg_prob_ = np.log(smoothed_totals - smoothed_fc) - np.log(smoothed_totals)
+
+    def predict(self, X):
+        log_probs = (X @ self.feature_log_prob_.T + 
+                     (1 - X) @ self.feature_log_neg_prob_.T + 
+                     self.class_log_prior_)
+        return self.classes_[np.argmax(log_probs, axis=1)]
+
+def evaluate_model(y_true, y_pred):
+    accuracy = accuracy_score(y_true, y_pred)
+    precision = precision_score(y_true, y_pred, average='weighted')
+    recall = recall_score(y_true, y_pred, average='weighted')
+    f1 = f1_score(y_true, y_pred, average='weighted')
+    return accuracy, precision, recall, f1
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
 base_path = os.path.join(current_dir, 'datasets')
 
 for i in [1, 2, 4]:
@@ -60,5 +114,31 @@ for i in [1, 2, 4]:
     save_to_csv(X_test_bernoulli, y_test, f'enron{i}_bernoulli_test.csv')
 
     print(f"enron{i} processed and saved.")
+
+    # Train and evaluate Multinomial Naive Bayes model
+    mnb_model = MultinomialNaiveBayes()
+    mnb_model.fit(X_train_bow, y_train)
+    mnb_predictions = mnb_model.predict(X_test_bow)
+
+    mnb_accuracy, mnb_precision, mnb_recall, mnb_f1 = evaluate_model(y_test, mnb_predictions)
+
+    print(f"Enron{i} Multinomial Naive Bayes Results:")
+    print(f"Accuracy: {mnb_accuracy:.4f}")
+    print(f"Precision: {mnb_precision:.4f}")
+    print(f"Recall: {mnb_recall:.4f}")
+    print(f"F1-score: {mnb_f1:.4f}")
+
+    # Train and evaluate Bernoulli Naive Bayes model
+    bnb_model = BernoulliNaiveBayes()
+    bnb_model.fit(X_train_bernoulli, y_train)
+    bnb_predictions = bnb_model.predict(X_test_bernoulli)
+
+    bnb_accuracy, bnb_precision, bnb_recall, bnb_f1 = evaluate_model(y_test, bnb_predictions)
+
+    print(f"Enron{i} Bernoulli Naive Bayes Results:")
+    print(f"Accuracy: {bnb_accuracy:.4f}")
+    print(f"Precision: {bnb_precision:.4f}")
+    print(f"Recall: {bnb_recall:.4f}")
+    print(f"F1-score: {bnb_f1:.4f}")
 
 print("Processing completed.")
