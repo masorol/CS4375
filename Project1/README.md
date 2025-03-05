@@ -1,4 +1,4 @@
-# Email Classification Project
+# Project 1: Email Classification
 
 ## Requirements
 
@@ -12,15 +12,16 @@
 
 Before running, please organize your files like so:
 
+```
 project/
 ├── datasets/
 │ ├── enron1/
 │ │ ├── train/
 │ │ │ ├── spam/
 │ │ │ └── ham/
-│ │ └── test/
-│ │ ├── spam/
-│ │ └── ham/
+│ │ ├── test/
+│ │ │ ├── spam/
+│ │ │ └── ham/
 │ ├── enron2/...
 │ └── enron4/...
 ├── output/
@@ -28,14 +29,18 @@ project/
 ├── bernoulli_naive_bayes.py
 ├── logistic_regression.py
 └── multinomial_naive_bayes.py
+```
 
 ## Usage
 
 ### Run models (one at a time):
 
-python main.py mnb # Multinomial Naive Bayes (BoW)
-python main.py bnb # Bernoulli Naive Bayes
-python main.py lr # Logistic Regression
+#### Multinomial Naive Bayes (Bag-of-Words):
+python main.py mnb
+#### Bernoulli Naive Bayes:
+python main.py bnb
+#### Logistic Regression:
+python main.py lr
 
 ### Find results:
 
