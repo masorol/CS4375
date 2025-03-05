@@ -14,7 +14,7 @@ class LogisticRegressionL2:
 
     def fit(self, X, y):
         n_samples, n_features = X.shape
-        self.weights = np.zeros(n_features + 1)  # +1 for bias term
+        self.weights = np.zeros(n_features + 1)
         X = np.hstack((np.ones((n_samples, 1)), X))
 
         for _ in range(self.max_iter):
@@ -22,8 +22,7 @@ class LogisticRegressionL2:
             h = self.sigmoid(z)
             gradient = X.T @ (h - y) / n_samples 
             
-            # Apply L2 regularization to all weights EXCEPT bias (first element)
-            gradient[1:] += self.l2 * self.weights[1:]  # Only regularize non-bias terms
+            gradient[1:] += self.l2 * self.weights[1:]
             
             self.weights -= self.learning_rate * gradient
 
@@ -39,9 +38,9 @@ def tune_hyperparameter(X, y, l2_values, learning_rate=0.1, max_iter=100):
 
     for l2 in l2_values:
         model = LogisticRegressionL2(learning_rate=learning_rate, max_iter=max_iter, l2=l2)
-        model.fit(X_train, y_train)  # Use full training split
+        model.fit(X_train, y_train)
         y_pred = model.predict(X_val)
-        f1 = f1_score(y_val, y_pred, pos_label=1)  # Use spam-focused metric
+        f1 = f1_score(y_val, y_pred, pos_label=1)
 
         if f1 > best_f1:
             best_f1 = f1

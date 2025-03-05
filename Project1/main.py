@@ -18,9 +18,7 @@ output_dir = 'output'
 os.makedirs(output_dir, exist_ok=True)
 
 def preprocess_text(text):
-    # Remove punctuation using regex
     text = re.sub(r'\W+', ' ', text)
-    # Tokenize and remove stopwords
     tokens = word_tokenize(text.lower())
     stop_words = set(stopwords.words('english'))
     return ' '.join([token for token in tokens if token not in stop_words])
@@ -33,7 +31,7 @@ def read_files(directory):
         for filename in os.listdir(path):
             with open(os.path.join(path, filename), 'r', encoding='utf-8', errors='ignore') as f:
                 raw_text = f.read()
-                processed_text = preprocess_text(raw_text)  # Apply preprocessing
+                processed_text = preprocess_text(raw_text)
                 texts.append(processed_text)
                 labels.append(label)
     return texts, labels
@@ -71,13 +69,12 @@ def main(model_choice):
 
         vectorizer = CountVectorizer()
         vectorizer.fit(train_texts)
-        X_test = vectorizer.transform(test_texts)  # No fitting on test data
+        X_test = vectorizer.transform(test_texts)
 
         if model_choice == 'mnb':
             X_train, y_train = create_feature_matrix(train_texts, train_labels, vectorizer)
             X_test, y_test = create_feature_matrix(test_texts, test_labels, vectorizer)
             
-            # Save Bag of Words datasets
             save_to_csv(X_train, y_train, f'enron{i}_bow_train.csv')
             save_to_csv(X_test, y_test, f'enron{i}_bow_test.csv')
             
@@ -91,7 +88,6 @@ def main(model_choice):
             X_train, y_train = create_feature_matrix(train_texts, train_labels, vectorizer, is_bernoulli=True)
             X_test, y_test = create_feature_matrix(test_texts, test_labels, vectorizer, is_bernoulli=True)
             
-            # Save Bernoulli datasets
             save_to_csv(X_train, y_train, f'enron{i}_bernoulli_train.csv')
             save_to_csv(X_test, y_test, f'enron{i}_bernoulli_test.csv')
             
@@ -104,25 +100,18 @@ def main(model_choice):
         elif model_choice == 'lr':
             l2_values = [0.01, 0.1, 1]
             
-            # Process both representations
             for rep_name, is_bernoulli in [('BoW', False), ('Bernoulli', True)]:
-                
-                # Create feature matrix
                 X_train, y_train = create_feature_matrix(train_texts, train_labels, vectorizer, is_bernoulli)
                 X_test, y_test = create_feature_matrix(test_texts, test_labels, vectorizer, is_bernoulli)
                 
-                # Convert to dense arrays
                 X_train_dense = X_train.toarray()
                 X_test_dense = X_test.toarray()
                 
-                # Hyperparameter tuning
                 best_l2 = tune_hyperparameter(X_train_dense, y_train, l2_values)
                 
-                # Train final model
                 model = LogisticRegressionL2(l2=best_l2, max_iter=100, learning_rate=0.1)
                 model.fit(X_train_dense, y_train)
                 
-                # Evaluate
                 predictions = model.predict(X_test_dense)
                 accuracy, precision, recall, f1 = lr_evaluate(y_test, predictions)
                 

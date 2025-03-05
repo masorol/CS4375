@@ -21,8 +21,8 @@ class BernoulliNaiveBayes:
             else:
                 feature_counts[idx, :] = X[y == c].sum(axis=0)
         
-        smoothed_fc = feature_counts + 1  # Add-one Laplace smoothing
-        smoothed_totals = class_counts.reshape(-1, 1) + 2  # Total count for each class + 2
+        smoothed_fc = feature_counts + 1
+        smoothed_totals = class_counts.reshape(-1, 1) + 2
         self.feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_totals)
         self.feature_log_neg_prob_ = np.log(smoothed_totals - smoothed_fc) - np.log(smoothed_totals)
 

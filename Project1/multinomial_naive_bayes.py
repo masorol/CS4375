@@ -15,8 +15,8 @@ class MultinomialNaiveBayes:
         for idx, c in enumerate(self.classes_):
             feature_counts[idx, :] = X[y == c].sum(axis=0)
         
-        smoothed_fc = feature_counts + 1  # Add-one Laplace smoothing
-        smoothed_totals = (feature_counts.sum(axis=1) + X.shape[1]).reshape(-1, 1)  # Add vocab size
+        smoothed_fc = feature_counts + 1
+        smoothed_totals = (feature_counts.sum(axis=1) + X.shape[1]).reshape(-1, 1)
         self.feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_totals)
 
     def predict(self, X):
