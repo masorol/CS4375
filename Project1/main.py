@@ -1,9 +1,29 @@
+import sys
 import os
-import numpy as np
 import pandas as pd
+import re
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import nltk
+from multinomial_naive_bayes import MultinomialNaiveBayes, evaluate_model as mnb_evaluate
+from bernoulli_naive_bayes import BernoulliNaiveBayes, evaluate_model as bnb_evaluate
+from logistic_regression import LogisticRegressionL2, tune_hyperparameter, evaluate_model as lr_evaluate
+
+nltk.download('punkt')
+nltk.download('stopwords')
+
+output_dir = 'output'
+os.makedirs(output_dir, exist_ok=True)
+
+def preprocess_text(text):
+    # Remove punctuation using regex
+    text = re.sub(r'\W+', ' ', text)
+    # Tokenize and remove stopwords
+    tokens = word_tokenize(text.lower())
+    stop_words = set(stopwords.words('english'))
+    return ' '.join([token for token in tokens if token not in stop_words])
 
 def read_files(directory):
     texts = []
@@ -12,7 +32,9 @@ def read_files(directory):
         path = os.path.join(directory, label)
         for filename in os.listdir(path):
             with open(os.path.join(path, filename), 'r', encoding='utf-8', errors='ignore') as f:
-                texts.append(f.read().lower())
+                raw_text = f.read()
+                processed_text = preprocess_text(raw_text)  # Apply preprocessing
+                texts.append(processed_text)
                 labels.append(label)
     return texts, labels
 
@@ -26,119 +48,102 @@ def create_feature_matrix(texts, labels, vectorizer, is_bernoulli=False):
 def save_to_csv(X, y, filename):
     df = pd.DataFrame(X.toarray())
     df['label'] = y
-    df.to_csv(filename, index=False)
+    full_path = os.path.join(output_dir, filename)
+    df.to_csv(full_path, index=False)
 
-class MultinomialNaiveBayes:
-    def __init__(self):
-        self.class_log_prior_ = None
-        self.feature_log_prob_ = None
-        self.classes_ = None
 
-    def fit(self, X, y):
-        self.classes_, class_counts = np.unique(y, return_counts=True)
-        self.class_log_prior_ = np.log(class_counts) - np.log(len(y))
+def main(model_choice):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    base_path = os.path.join(current_dir, 'datasets')
 
-        feature_counts = np.zeros((len(self.classes_), X.shape[1]))
-        for idx, c in enumerate(self.classes_):
-            feature_counts[idx, :] = X[y == c].sum(axis=0)
+    for i in [1, 2, 4]:
+        train_dir = os.path.join(base_path, f'enron{i}', 'train')
+        test_dir = os.path.join(base_path, f'enron{i}', 'test')
+
+        if not os.path.exists(train_dir) or not os.path.exists(test_dir):
+            print(f"enron{i} not found.")
+            continue
+
+        print(f"\nProcessing enron{i}")
+
+        train_texts, train_labels = read_files(train_dir)
+        test_texts, test_labels = read_files(test_dir)
+
+        vectorizer = CountVectorizer()
+        vectorizer.fit(train_texts)
+        X_test = vectorizer.transform(test_texts)  # No fitting on test data
+
+        if model_choice == 'mnb':
+            X_train, y_train = create_feature_matrix(train_texts, train_labels, vectorizer)
+            X_test, y_test = create_feature_matrix(test_texts, test_labels, vectorizer)
+            
+            # Save Bag of Words datasets
+            save_to_csv(X_train, y_train, f'enron{i}_bow_train.csv')
+            save_to_csv(X_test, y_test, f'enron{i}_bow_test.csv')
+            
+            model = MultinomialNaiveBayes()
+            model.fit(X_train, y_train)
+            predictions = model.predict(X_test)
+            accuracy, precision, recall, f1 = mnb_evaluate(y_test, predictions)
+            print(f"Enron{i} Multinomial Naive Bayes Results:")
         
-        smoothed_fc = feature_counts + 1  # Add-one Laplace smoothing
-        smoothed_totals = smoothed_fc.sum(axis=1).reshape(-1, 1)
-        self.feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_totals)
-
-    def predict(self, X):
-        log_probs = X @ self.feature_log_prob_.T + self.class_log_prior_
-        return self.classes_[np.argmax(log_probs, axis=1)]
-
-class BernoulliNaiveBayes:
-    def __init__(self):
-        self.class_log_prior_ = None
-        self.feature_log_prob_ = None
-        self.classes_ = None
-
-    def fit(self, X, y):
-        self.classes_, class_counts = np.unique(y, return_counts=True)
-        self.class_log_prior_ = np.log(class_counts) - np.log(len(y))
-
-        feature_counts = np.zeros((len(self.classes_), X.shape[1]))
-        for idx, c in enumerate(self.classes_):
-            feature_counts[idx, :] = X[y == c].sum(axis=0)
+        elif model_choice == 'bnb':
+            X_train, y_train = create_feature_matrix(train_texts, train_labels, vectorizer, is_bernoulli=True)
+            X_test, y_test = create_feature_matrix(test_texts, test_labels, vectorizer, is_bernoulli=True)
+            
+            # Save Bernoulli datasets
+            save_to_csv(X_train, y_train, f'enron{i}_bernoulli_train.csv')
+            save_to_csv(X_test, y_test, f'enron{i}_bernoulli_test.csv')
+            
+            model = BernoulliNaiveBayes()
+            model.fit(X_train, y_train)
+            predictions = model.predict(X_test)
+            accuracy, precision, recall, f1 = bnb_evaluate(y_test, predictions)
+            print(f"Enron{i} Bernoulli Naive Bayes Results:")
         
-        smoothed_fc = feature_counts + 1  # Add-one Laplace smoothing
-        smoothed_totals = class_counts.reshape(-1, 1) + 2  # Total count for each class + 2
-        self.feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_totals)
-        self.feature_log_neg_prob_ = np.log(smoothed_totals - smoothed_fc) - np.log(smoothed_totals)
+        elif model_choice == 'lr':
+            l2_values = [0.01, 0.1, 1]
+            
+            # Process both representations
+            for rep_name, is_bernoulli in [('BoW', False), ('Bernoulli', True)]:
+                
+                # Create feature matrix
+                X_train, y_train = create_feature_matrix(train_texts, train_labels, vectorizer, is_bernoulli)
+                X_test, y_test = create_feature_matrix(test_texts, test_labels, vectorizer, is_bernoulli)
+                
+                # Convert to dense arrays
+                X_train_dense = X_train.toarray()
+                X_test_dense = X_test.toarray()
+                
+                # Hyperparameter tuning
+                best_l2 = tune_hyperparameter(X_train_dense, y_train, l2_values)
+                
+                # Train final model
+                model = LogisticRegressionL2(l2=best_l2, max_iter=100, learning_rate=0.1)
+                model.fit(X_train_dense, y_train)
+                
+                # Evaluate
+                predictions = model.predict(X_test_dense)
+                accuracy, precision, recall, f1 = lr_evaluate(y_test, predictions)
+                
+                print(f"\nEnron{i} Logistic Regression ({rep_name}) Results:")
+                print(f"Best L2: {best_l2}")
+                print(f"Accuracy: {accuracy:.4f}")
+                print(f"Precision: {precision:.4f}")
+                print(f"Recall: {recall:.4f}")
+                print(f"F1-score: {f1:.4f}")
+        
+        
+        if model_choice in ['mnb', 'bnb']:
+            print(f"Accuracy: {accuracy:.4f}")
+            print(f"Precision: {precision:.4f}")
+            print(f"Recall: {recall:.4f}")
+            print(f"F1-score: {f1:.4f}")
+            print(f"Datasets for enron{i} have been saved.")
 
-    def predict(self, X):
-        log_probs = (X @ self.feature_log_prob_.T + 
-                     (1 - X) @ self.feature_log_neg_prob_.T + 
-                     self.class_log_prior_)
-        return self.classes_[np.argmax(log_probs, axis=1)]
+if __name__ == "__main__":
+    if len(sys.argv) != 2 or sys.argv[1] not in ['mnb', 'bnb', 'lr']:
+        print("Invalid model choice. Please call: python main.py [mnb|bnb|lr]")
+        sys.exit(1)
+    main(sys.argv[1])
 
-def evaluate_model(y_true, y_pred):
-    accuracy = accuracy_score(y_true, y_pred)
-    precision = precision_score(y_true, y_pred, average='weighted')
-    recall = recall_score(y_true, y_pred, average='weighted')
-    f1 = f1_score(y_true, y_pred, average='weighted')
-    return accuracy, precision, recall, f1
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-base_path = os.path.join(current_dir, 'datasets')
-
-for i in [1, 2, 4]:
-    train_dir = os.path.join(base_path, f'enron{i}', 'train')
-    test_dir = os.path.join(base_path, f'enron{i}', 'test')
-
-    if not os.path.exists(train_dir) or not os.path.exists(test_dir):
-        print(f"enron{i} not found.")
-        continue
-
-    print(f"\nProcessing enron{i}")
-
-    train_texts, train_labels = read_files(train_dir)
-    test_texts, test_labels = read_files(test_dir)
-
-    vectorizer = CountVectorizer(stop_words='english')
-    vectorizer.fit(train_texts)
-
-    X_train_bow, y_train = create_feature_matrix(train_texts, train_labels, vectorizer)
-    X_test_bow, y_test = create_feature_matrix(test_texts, test_labels, vectorizer)
-
-    save_to_csv(X_train_bow, y_train, f'enron{i}_bow_train.csv')
-    save_to_csv(X_test_bow, y_test, f'enron{i}_bow_test.csv')
-
-    X_train_bernoulli, _ = create_feature_matrix(train_texts, train_labels, vectorizer, is_bernoulli=True)
-    X_test_bernoulli, _ = create_feature_matrix(test_texts, test_labels, vectorizer, is_bernoulli=True)
-
-    save_to_csv(X_train_bernoulli, y_train, f'enron{i}_bernoulli_train.csv')
-    save_to_csv(X_test_bernoulli, y_test, f'enron{i}_bernoulli_test.csv')
-
-    print(f"enron{i} processed and saved.")
-
-    # Train and evaluate Multinomial Naive Bayes model
-    mnb_model = MultinomialNaiveBayes()
-    mnb_model.fit(X_train_bow, y_train)
-    mnb_predictions = mnb_model.predict(X_test_bow)
-
-    mnb_accuracy, mnb_precision, mnb_recall, mnb_f1 = evaluate_model(y_test, mnb_predictions)
-
-    print(f"Enron{i} Multinomial Naive Bayes Results:")
-    print(f"Accuracy: {mnb_accuracy:.4f}")
-    print(f"Precision: {mnb_precision:.4f}")
-    print(f"Recall: {mnb_recall:.4f}")
-    print(f"F1-score: {mnb_f1:.4f}")
-
-    # Train and evaluate Bernoulli Naive Bayes model
-    bnb_model = BernoulliNaiveBayes()
-    bnb_model.fit(X_train_bernoulli, y_train)
-    bnb_predictions = bnb_model.predict(X_test_bernoulli)
-
-    bnb_accuracy, bnb_precision, bnb_recall, bnb_f1 = evaluate_model(y_test, bnb_predictions)
-
-    print(f"Enron{i} Bernoulli Naive Bayes Results:")
-    print(f"Accuracy: {bnb_accuracy:.4f}")
-    print(f"Precision: {bnb_precision:.4f}")
-    print(f"Recall: {bnb_recall:.4f}")
-    print(f"F1-score: {bnb_f1:.4f}")
-
-print("Processing completed.")
