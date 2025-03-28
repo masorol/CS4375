@@ -288,7 +288,7 @@ def main():
         ]
 
         for name, classifier_func in classifiers:
-            print(f"\n=== Evaluating {name} on MNIST ===")
+            print(f"\nEvaluating {name} on MNIST")
             best_params, accuracy, _ = classifier_func(
                 train_data, val_data, test_data, compute_f1=False
             )
