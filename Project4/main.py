@@ -3,6 +3,7 @@ from sklearn.datasets import fetch_openml
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
+import matplotlib
 
 mnist = fetch_openml('mnist_784', version=1, as_frame=False)
 X, y = mnist.data, mnist.target.astype(int)
